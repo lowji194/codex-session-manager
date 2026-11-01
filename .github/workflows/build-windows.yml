@@ -1,0 +1,71 @@
+name: Build Windows portable
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version label (letters, numbers, dot, underscore, hyphen)"
+        required: true
+        default: "preview"
+      include_runtime:
+        description: "Bundle pinned Microsoft WebView2 Fixed Runtime (offline portable)"
+        type: boolean
+        required: true
+        default: true
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  portable:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          architecture: "x64"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-build.txt
+      - name: Install build dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements-build.txt
+      - name: Run tests
+        run: python -m unittest discover -s tests -v
+      - name: Choose version label
+        shell: pwsh
+        env:
+          MANUAL_VERSION: ${{ inputs.version }}
+          TAG_NAME: ${{ github.ref_name }}
+          TRIGGER_EVENT: ${{ github.event_name }}
+        run: |
+          $releaseVersion = if ($env:TRIGGER_EVENT -eq 'workflow_dispatch') { $env:MANUAL_VERSION } else { $env:TAG_NAME }
+          if ($releaseVersion -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$') { throw 'Invalid version label' }
+          "PORTABLE_VERSION=$releaseVersion" >> $env:GITHUB_ENV
+      - name: Fetch and verify pinned Microsoft WebView2 x64 runtime
+        if: github.event_name != 'workflow_dispatch' || inputs.include_runtime
+        shell: pwsh
+        run: |
+          $runtimeFolder = & ./scripts/fetch_webview2.ps1
+          "PORTABLE_WEBVIEW2_RUNTIME=$runtimeFolder" >> $env:GITHUB_ENV
+      - name: Build portable ZIP
+        shell: pwsh
+        run: |
+          $buildArguments = @('scripts/build_portable.py', '--version', $env:PORTABLE_VERSION)
+          if ($env:PORTABLE_WEBVIEW2_RUNTIME) { $buildArguments += @('--webview2-runtime', $env:PORTABLE_WEBVIEW2_RUNTIME) }
+          & python @buildArguments
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload portable ZIP and checksum
+        uses: actions/upload-artifact@v4
+        with:
+          name: CodexSessionManager-${{ env.PORTABLE_VERSION }}-windows-x64
+          path: |
+            dist/*.zip
+            dist/*.zip.sha256
+          if-no-files-found: error
+          retention-days: 14

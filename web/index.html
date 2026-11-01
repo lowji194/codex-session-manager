@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Codex Session Manager</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <svg class="icon-definitions" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><defs>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6 7a7 7 0 0 1 11-1l3 6M4 12l3 6a7 7 0 0 0 11-1"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v9H3Z"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></symbol>
+    <symbol id="i-restore" viewBox="0 0 24 24"><path d="M4 4v6h6M4 10a8 8 0 1 1 0 6M12 8v5l3 2"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7M14 10v7"/></symbol>
+    <symbol id="i-exit" viewBox="0 0 24 24"><path d="M9 4H4v16h5M10 12h11m-4-4 4 4-4 4"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/></symbol>
+    <symbol id="i-stack" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="5" rx="2"/><rect x="4" y="14" width="16" height="6" rx="2"/></symbol>
+  </defs></svg>
+  <div class="shell">
+    <aside class="sidebar" aria-label="Ứng dụng và tiện ích">
+      <div class="brand"><div class="brand-mark" id="brand-mark" aria-hidden="true">C</div><div><strong>Session Manager</strong><span id="brand-eyebrow">Codex</span></div></div>
+      <div class="sidebar-label">Ứng dụng</div>
+      <nav class="provider-switch" aria-label="Chọn ứng dụng">
+        <button type="button" class="provider-tab active" data-provider="codex" aria-pressed="true"><span class="provider-icon" aria-hidden="true">C</span><span>Codex</span><span class="provider-active-dot" aria-hidden="true"></span></button>
+        <button type="button" class="provider-tab" data-provider="antigravity" aria-pressed="false"><span class="provider-icon" aria-hidden="true">A</span><span>Antigravity</span><span class="provider-active-dot" aria-hidden="true"></span></button>
+      </nav>
+      <div class="sidebar-bottom">
+        <button type="button" class="btn btn-quiet folder-button" id="open-folder"><svg class="icon"><use href="#i-folder"/></svg>Thư mục sao lưu</button>
+        <div class="storage-note"><svg class="icon"><use href="#i-lock"/></svg><span>Phiên được mã hóa<br>trên máy của bạn</span></div>
+      </div>
+    </aside>
+    <div class="workspace">
+      <header class="topbar">
+        <div><h1>Phiên đăng nhập</h1><p class="page-subtitle">Lưu và chuyển đổi tài khoản của bạn.</p></div>
+        <div class="top-actions"><div class="sync-indicator" id="sync-indicator" role="status"><i aria-hidden="true"></i><span id="sync-label">Đang kết nối…</span></div><button type="button" class="btn btn-secondary" id="reload"><svg class="icon"><use href="#i-refresh"/></svg>Làm mới</button></div>
+      </header>
+      <main>
+        <section class="hero-grid" aria-label="Phiên hiện tại và tổng quan">
+          <article class="card account-card">
+            <div class="card-head"><div class="current-identity"><div class="account-avatar" id="current-avatar" aria-hidden="true">—</div><div class="current-text"><p class="current-caption">Đang sử dụng</p><h2 id="current-name">Đang kiểm tra…</h2><p id="current-email">—</p></div></div><span class="status-pill" id="current-status">Đang kiểm tra</span></div>
+            <div class="account-details"><div class="live-quota" id="live-quota"><div><span>Phiên hiện tại</span><strong id="current-session">—</strong></div><div><span>7 ngày</span><strong id="current-weekly">—</strong></div><div><span>Tình trạng</span><strong id="current-quota-status">—</strong></div></div>
+            <div class="account-footer"><button type="button" class="btn btn-primary" id="backup"><svg class="icon"><use href="#i-plus"/></svg>Lưu phiên hiện tại</button><button type="button" class="btn btn-quiet logout-button" id="logout"><svg class="icon"><use href="#i-exit"/></svg>Đăng xuất</button></div></div>
+          </article>
+          <div class="overview-strip" aria-label="Tổng quan phiên"><div class="stats"><span class="stat stat-saved"><strong id="backup-count">0</strong><span>Đã lưu</span></span><span class="stat stat-active"><strong id="active-count">0</strong><span id="active-label">Còn quota</span></span><span class="stat stat-limited"><strong id="limited-count">0</strong><span id="limited-label">Hết quota</span></span></div><p class="cache-caption" id="cache-caption" title="Quota trực tiếp từ phiên Codex">Tự làm mới mỗi 5 phút.</p></div>
+        </section>
+        <section class="table-section" aria-labelledby="saved-title">
+          <div class="section-head"><div><h2 id="saved-title">Phiên đã lưu <span class="count-label" id="saved-count" hidden>0</span></h2><p class="section-hint">Chọn một phiên để khôi phục.</p></div><label class="search-field"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg><input type="search" id="session-search" aria-label="Tìm phiên theo tên hoặc email" placeholder="Tìm tên hoặc email…" autocomplete="off"></label></div>
+          <div class="table-card"><div class="table-scroll"><table aria-label="Danh sách phiên đã lưu"><thead><tr><th class="col-account" scope="col">Tài khoản</th><th class="col-plan" scope="col">Gói</th><th class="col-status" scope="col">Trạng thái</th><th class="col-session quota-only" scope="col">Phiên hiện tại</th><th class="col-week quota-only" scope="col">7 ngày</th><th class="col-sync quota-only" scope="col">Cập nhật</th><th class="col-created" scope="col">Đã lưu lúc</th></tr></thead><tbody id="backup-body"></tbody></table></div>
+            <div class="empty" id="empty-state"><div class="empty-icon"><svg class="icon"><use href="#i-stack"/></svg></div><h3 id="empty-title">Chưa có phiên đã lưu</h3><p id="empty-description">Chọn “Lưu phiên hiện tại” để tạo bản sao lưu đầu tiên.</p></div>
+            <div class="selection-bar"><span id="selection-label" aria-live="polite">Chưa chọn phiên</span><div class="action-row"><button type="button" class="btn btn-danger-soft" id="delete" disabled><svg class="icon"><use href="#i-trash"/></svg>Xóa</button><button type="button" class="btn btn-primary" id="restore" disabled><svg class="icon"><use href="#i-restore"/></svg>Khôi phục phiên</button></div></div>
+          </div>
+        </section>
+      </main>
+      <footer class="workspace-footer"><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>Phiên hiện tại được sao lưu trước khi khôi phục phiên khác.</footer>
+    </div>
+  </div>
+  <dialog class="confirmation" id="confirmation-dialog" aria-labelledby="confirmation-title" aria-describedby="confirmation-description">
+    <form method="dialog"><div class="confirmation-icon"><svg class="icon" aria-hidden="true"><use href="#i-restore"/></svg></div><h2 id="confirmation-title">Xác nhận thao tác</h2><p id="confirmation-description"></p><div class="confirmation-actions"><button class="btn btn-secondary" value="cancel" autofocus>Hủy</button><button class="btn btn-primary" id="confirmation-accept" value="accept">Tiếp tục</button></div></form>
+  </dialog>
+  <div class="busy-layer hidden" id="busy-layer" tabindex="-1" role="dialog" aria-modal="true" aria-label="Đang xử lý"><div class="busy-card"><div class="spinner" aria-hidden="true"></div><strong>Đang xử lý</strong><span id="busy-text" role="status">Vui lòng chờ…</span></div></div>
+  <div class="toast-stack" id="toast-stack" role="status" aria-live="polite"></div>
+  <script src="app.js"></script>
+</body>
+</html>

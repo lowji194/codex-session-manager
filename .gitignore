@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+tool/
+
+# Portable builds and local-only configuration
+config.local.json
+.env
+.env.*
+!.env.example
+.venv*/
+.build*/
+build/
+dist/
+release/
+*.zip
