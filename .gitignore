@@ -13,3 +13,7 @@ build/
 dist/
 release/
 *.zip
+
+# Rainmeter runtime contains local account metadata
+rainmeter/**/Cache.json
+rainmeter/**/credential.dat

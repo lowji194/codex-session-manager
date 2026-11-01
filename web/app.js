@@ -33,6 +33,28 @@ function quotaBar(text, kind) {
     <span class="quota-progress-label">${escapeHtml(compactQuota(text))}</span>
   </span>`;
 }
+function agyQuotaText(item, prefix) {
+  const windows = (item?.quotaWindows || []).filter(window => String(window.label || '').startsWith(prefix));
+  if (!windows.length) return 'Chưa có dữ liệu';
+  return windows.map(window => {
+    const remaining = Number(window.remaining);
+    if (!Number.isFinite(remaining)) return `${window.label}: chưa có dữ liệu`;
+    return `${window.label}: còn ${Math.max(0, Math.min(100, remaining))}%`;
+  }).join(' · ');
+}
+// Codex retains quotaBar(item.weekly, 'weekly'); Antigravity shows its own model windows.
+function agyQuotaBars(item, prefix) {
+  const windows = (item?.quotaWindows || []).filter(window => String(window.label || '').startsWith(prefix));
+  if (!windows.length) return '<span class="quota-unavailable">Chưa có dữ liệu</span>';
+  return `<div class="agy-quota-windows">${windows.map(window => {
+    const remaining = Number(window.remaining);
+    if (!Number.isFinite(remaining)) return '<span class="quota-unavailable">Chưa có dữ liệu</span>';
+    const percent = Math.max(0, Math.min(100, remaining));
+    const tone = percent <= 10 ? 'badge-bad' : percent <= 30 ? 'badge-warn' : 'badge-good';
+    const reset = window.resetAt ? ` · Đặt lại: ${window.resetAt}` : '';
+    return `<span class="quota-progress session ${tone}" title="${escapeHtml(window.label + reset)}"><span class="quota-progress-fill" style="width:${percent}%"></span><span class="quota-progress-label">${escapeHtml(window.label)} · ${percent}% còn</span></span>`;
+  }).join('')}</div>`;
+}
 function displayStatus(text) {
   const labels = { 'HOẠT ĐỘNG':'Còn quota', 'ĐANG HOẠT ĐỘNG':'Còn quota', 'ĐÃ HẾT QUOTA':'Hết quota', 'HẾT QUOTA':'Hết quota', 'LỖI ĐỒNG BỘ':'Chưa đồng bộ', 'LỖI PHIÊN':'Lỗi phiên', 'UNAVAILABLE':'Chưa có dữ liệu', 'ĐANG DÙNG':'Đang dùng', 'ĐÃ LƯU':'Đã lưu' };
   return labels[String(text || '').toUpperCase()] || text || 'Chưa có dữ liệu';
@@ -73,8 +95,13 @@ function render(next) {
   $('current-status').textContent = current ? 'Đang đăng nhập' : 'Chưa đăng nhập';
   $('current-status').classList.toggle('off', !current);
   const currentQuota = state.currentQuota || {};
-  $('current-session').textContent = compactQuota(currentQuota.session);
-  $('current-weekly').textContent = compactQuota(currentQuota.weekly);
+  $('current-session-label').textContent = isAgy ? 'Gemini' : 'Phiên hiện tại';
+  $('current-weekly-label').textContent = isAgy ? 'Mô hình khác' : '7 ngày';
+  $('session-column-label').textContent = isAgy ? 'Gemini' : 'Phiên hiện tại';
+  $('weekly-column-label').textContent = isAgy ? 'Mô hình khác' : '7 ngày';
+  document.body.classList.toggle('supports-quota', isAgy && state.supportsQuota === true);
+  $('current-session').textContent = isAgy ? agyQuotaText(currentQuota, 'GEM') : compactQuota(currentQuota.session);
+  $('current-weekly').textContent = isAgy ? agyQuotaText(currentQuota, '3P') : compactQuota(currentQuota.weekly);
   $('current-session').className = (/\d+%/.test(String(currentQuota.session || '')) ? quotaTone(currentQuota.session) : '');
   $('current-weekly').className = (/\d+%/.test(String(currentQuota.weekly || '')) ? quotaTone(currentQuota.weekly) : '');
   $('current-quota-status').textContent = current ? displayStatus(currentQuota.status) : '—';
@@ -83,18 +110,17 @@ function render(next) {
   $('logout').disabled = !current;
   $('backup-count').textContent = state.backups.length;
   $('saved-count').textContent = state.backups.length;
-  $('active-count').textContent = isAgy ? (current ? 1 : 0) : state.backups.filter(x => String(x.status).toUpperCase().includes('HOẠT')).length;
-  $('limited-count').textContent = isAgy ? Math.max(0, state.backups.length - (current ? 1 : 0)) : state.backups.filter(x => String(x.status).toUpperCase().includes('HẾT')).length;
-  $('active-label').textContent = isAgy ? 'Đang đăng nhập' : 'Còn quota';
-  $('limited-label').textContent = isAgy ? 'Phiên dự phòng' : 'Hết quota';
-  $('cache-caption').textContent = isAgy
-    ? 'Chỉ sao lưu đăng nhập, không gồm hội thoại và dự án.'
-    : (state.quotaError ? state.quotaError : 'Tự làm mới mỗi 5 phút.');
+  $('active-count').textContent = state.backups.filter(x => String(x.status).toUpperCase().includes('HOẠT')).length;
+  $('limited-count').textContent = state.backups.filter(x => String(x.status).toUpperCase().includes('HẾT')).length;
+  $('active-label').textContent = 'Còn quota';
+  $('limited-label').textContent = 'Hết quota';
+  $('cache-caption').textContent = state.quotaError || 'Tự làm mới mỗi 5 phút.';
   $('cache-caption').title = state.quotaError || (isAgy ? '' : `Quota trực tiếp từ phiên Codex lúc ${state.quotaFetchedAt || 'chưa xác định'}`);
   $('cache-caption').classList.toggle('error', Boolean(state.quotaError));
   $('sync-indicator').classList.toggle('error', Boolean(state.quotaError));
-  const updatedAt = String(state.quotaFetchedAt || '').split('·').pop().trim();
-  $('sync-label').textContent = isAgy ? 'Đã đọc phiên trên máy' : (state.quotaError ? 'Chưa đồng bộ đầy đủ' : (updatedAt ? `Đã cập nhật ${updatedAt}` : 'Sẵn sàng'));
+  const fetchedText = String(state.quotaFetchedAt || '');
+  const updatedAt = fetchedText.match(/\b\d{2}:\d{2}(?::\d{2})?\b/)?.[0] || '';
+  $('sync-label').textContent = state.quotaError ? 'Chưa đồng bộ đầy đủ' : (updatedAt ? `Đã cập nhật ${updatedAt}` : 'Sẵn sàng');
 
   if (selectedId && !state.backups.some(x => x.id === selectedId)) selectedId = null;
   const body = $('backup-body');
@@ -104,11 +130,11 @@ function render(next) {
   body.innerHTML = visibleBackups.map(item => {
     const sync = splitDate(item.quotaUpdated), created = splitDate(item.backupAt);
     return `<tr data-id="${escapeHtml(item.id)}" class="${item.id === selectedId ? 'selected' : ''}" tabindex="0" aria-selected="${item.id === selectedId}">
-      <td><div class="account-name" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</div><div class="account-email" title="${escapeHtml(item.email)}">${escapeHtml(item.email)}</div></td>
+      <td><div class="account-name" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}${isAgy && item.isCurrent ? ' <span class="current-row-tag">Đang dùng</span>' : ''}</div><div class="account-email" title="${escapeHtml(item.email)}">${escapeHtml(item.email)}</div></td>
       <td><span class="badge badge-plan">${escapeHtml(item.plan)}</span></td>
       <td><span class="badge ${statusTone(item.status)}">${escapeHtml(displayStatus(item.status))}</span></td>
-      <td class="quota-only">${quotaBar(item.session, 'session')}</td>
-      <td class="quota-only">${quotaBar(item.weekly, 'weekly')}</td>
+      <td class="quota-only">${isAgy ? agyQuotaBars(item, 'GEM') : quotaBar(item.session, 'session')}</td>
+      <td class="quota-only">${isAgy ? agyQuotaBars(item, '3P') : quotaBar(item.weekly, 'weekly')}</td>
       <td class="quota-only"><div class="date-main">${escapeHtml(sync[0])}</div><div class="date-sub">${escapeHtml(sync[1])}</div></td>
       <td><div class="date-main">${escapeHtml(created[0])}</div><div class="date-sub">${escapeHtml(created[1])}</div></td>
     </tr>`;

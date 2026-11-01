@@ -15,6 +15,30 @@ Skin Rainmeter Quota AI có thể gọi `main.py --switch-email EMAIL` để chu
 phiên. Lệnh này bỏ qua an toàn nếu EMAIL đang được dùng; với phiên khác, nó luôn
 backup phiên hiện tại trước khi restore rồi mở lại Codex.
 
+## Ảnh giao diện
+
+### Codex
+
+![Quản lý phiên Codex](docs/screenshots/codex.png)
+
+### Antigravity
+
+![Quản lý phiên Antigravity](docs/screenshots/antigravity.png)
+
+Ảnh do tác giả cung cấp để minh họa giao diện; dữ liệu và trạng thái quota trong ảnh là tại thời điểm chụp.
+
+## Quota Antigravity
+
+Antigravity hiển thị quota của phiên hiện tại và từng phiên đã lưu theo dữ liệu trả về: **GEM 5H / GEM 7D** cho Gemini và **3P 5H / 3P 7D** cho nhóm mô hình khác. Mỗi thanh biểu thị phần trăm còn lại; thiếu dữ liệu sẽ hiện rõ “Chưa có dữ liệu”, không tự coi là 100%.
+
+Tự làm mới mỗi 5 phút; nút **Làm mới** bỏ qua cache. Nhãn **Đang dùng** được giữ riêng với trạng thái quota. Để làm mới credential hết hạn, cần cấu hình OAuth riêng qua môi trường hoặc `config.local.json`; cấu hình riêng không nằm trong repository hoặc Release.
+
+## Skin Rainmeter Quota AI
+
+![Skin Rainmeter Quota AI với Codex và Antigravity](docs/screenshots/rainmeter-quota-ai.png)
+
+Mã nguồn skin đi kèm tại [`rainmeter/QuotaAI`](rainmeter/QuotaAI/README.md). Cấu hình đường dẫn Session Manager theo hướng dẫn trong thư mục này. Skin và ứng dụng dùng chung dữ liệu quota qua chế độ CLI JSON; bản phát hành không chứa cache hoặc tài khoản cá nhân.
+
 ## Giao diện
 
 - Thanh bên chọn Codex hoặc Antigravity; bảng và dữ liệu đặt trên nền gần trắng dễ đọc.
@@ -27,7 +51,7 @@ backup phiên hiện tại trước khi restore rồi mở lại Codex.
 
 ## Bản portable cho Windows
 
-Giải nén toàn bộ gói `CodexSessionManager-1.1.0-offline-windows-x64.zip` vào một thư mục có quyền ghi, rồi mở `CodexSessionManager.exe`. Không tách EXE khỏi `_internal` hoặc `WebView2Runtime`.
+Giải nén toàn bộ gói `CodexSessionManager-1.2.0-offline-windows-x64.zip` vào một thư mục có quyền ghi, rồi mở `CodexSessionManager.exe`. Không tách EXE khỏi `_internal` hoặc `WebView2Runtime`.
 
 - Gói **offline** kèm Python và WebView2 Fixed Runtime, không cần môi trường Python dùng chung hoặc cài WebView2 riêng. “Offline” chỉ nói về cài đặt; lấy quota trực tuyến vẫn cần Internet.
 - Gói **lite** không kèm WebView2, phù hợp khi máy đã có Microsoft Edge WebView2 Runtime.

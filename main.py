@@ -137,29 +137,26 @@ def fetch_antigravity_quota(timeout: float = 4.0) -> tuple[dict[str, Any], str]:
 def _agy_usage_from_groups(groups: list[dict[str, Any]]) -> dict[str, Any]:
     quotas: dict[str, Any] = {}
     for group in groups:
-        buckets = [item for item in (group.get("buckets") or []) if item.get("remainingFraction") is not None]
-        if not buckets:
-            continue
-        limiting = min(buckets, key=lambda item: float(item.get("remainingFraction", 1)))
-        remaining = max(0.0, min(100.0, float(limiting.get("remainingFraction", 0)) * 100))
         group_name = str(group.get("displayName") or "").casefold()
         prefix = "GEM" if "gemini" in group_name else "3P"
-        window = "7D" if str(limiting.get("window") or "").casefold() == "weekly" else "5H"
-        quotas[f"{prefix} {window}"] = {
-            "used": round(100 - remaining, 1),
-            "total": 100,
-            "remaining": round(remaining, 1),
-            "resetAt": limiting.get("resetTime"),
-            "unlimited": False,
-        }
+        for bucket in group.get("buckets") or []:
+            if bucket.get("remainingFraction") is None:
+                continue
+            fraction = float(bucket["remainingFraction"])
+            if not __import__("math").isfinite(fraction):
+                continue
+            remaining = round(max(0.0, min(100.0, fraction * 100)), 1)
+            raw_window = str(bucket.get("window") or "").casefold()
+            window = {"weekly": "7D", "five_hour": "5H", "five_hours": "5H", "5h": "5H", "daily": "1D"}.get(raw_window, raw_window.upper() or "QUOTA")
+            label = f"{prefix} {window}"
+            # Preserve each reported window instead of choosing one bucket for a group.
+            if label not in quotas or remaining < quotas[label]["remaining"]:
+                quotas[label] = {"used": round(100 - remaining, 1), "total": 100,
+                                 "remaining": remaining, "resetAt": bucket.get("resetTime"), "unlimited": False}
     if not quotas:
         raise RuntimeError("Antigravity chưa trả dữ liệu quota")
-    return {
-        "plan": "AGY",
-        "limitReached": any(float(item["remaining"]) <= 0 for item in quotas.values()),
-        "quotas": quotas,
-        "resetCredits": None,
-    }
+    return {"plan": "AGY", "limitReached": any(item["remaining"] <= 0 for item in quotas.values()),
+            "quotas": quotas, "resetCredits": None}
 
 
 def _agy_cloud_quota(access_token: str, timeout: float) -> dict[str, Any]:
@@ -1331,6 +1328,8 @@ class WebApi:
         self.provider = "codex"
         self.store: SessionStore | AntigravitySessionStore = self.codex_store
         self.records: list[BackupRecord] = []
+        self._agy_quota_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+        self._agy_quota_lock = threading.Lock()
 
     @staticmethod
     def _format_date(value: str) -> str:
@@ -1341,50 +1340,84 @@ class WebApi:
         except ValueError:
             return value
 
-    def build_agy_state(self) -> dict[str, Any]:
+    def _read_agy_quota(self, credential: WindowsCredential, force: bool = False) -> tuple[dict[str, Any], WindowsCredential | None]:
+        import hashlib
+        key = hashlib.sha256(credential.blob).hexdigest()
+        with self._agy_quota_lock:
+            cached = self._agy_quota_cache.get(key)
+            if cached and not force and time.monotonic() - cached[0] < QUOTA_REFRESH_SECONDS:
+                return dict(cached[1]), None
+        usage, error, refreshed = fetch_antigravity_quota_for_credential(credential)
+        windows = [{"label": label, "used": value["used"], "total": value.get("total", 100),
+                    "remaining": value["remaining"], "resetAt": value.get("resetAt")}
+                   for label, value in (usage.get("quotas") or {}).items()]
+        result = {"quotaWindows": windows, "status": "ĐÃ HẾT QUOTA" if usage.get("limitReached") else "HOẠT ĐỘNG",
+                  "error": "Không đọc được quota Antigravity. Kiểm tra đăng nhập hoặc cấu hình OAuth." if error else "",
+                  "fetched_at": datetime.now().astimezone().isoformat(timespec="seconds")}
+        if error or not windows:
+            result["status"] = "UNAVAILABLE"
+            result["error"] = result["error"] or "Antigravity chưa trả dữ liệu quota."
+        with self._agy_quota_lock:
+            self._agy_quota_cache[key] = (time.monotonic(), dict(result))
+            if refreshed:
+                self._agy_quota_cache[hashlib.sha256(refreshed.blob).hexdigest()] = (time.monotonic(), dict(result))
+        return result, refreshed
+
+    def build_agy_state(self, force_quota: bool = False) -> dict[str, Any]:
         try:
-            profile = self.agy_store.current_profile()
+            current_credential = self.agy_store.current_credential()
+            profile = agy_profile_from_credential(current_credential.blob) if current_credential else None
             profile_error = ""
-        except Exception as exc:
-            profile = None
-            profile_error = str(exc)
+        except Exception:
+            current_credential, profile = None, None
+            profile_error = "Không đọc được phiên Antigravity trên máy."
         self.records = self.agy_store.list_backups()
         current_email = str((profile or {}).get("email") or "").casefold()
-        records = [
-            {
-                "id": record.path.name,
-                "name": record.name,
-                "email": record.email,
-                "plan": "AGY",
-                "status": "ĐANG DÙNG" if current_email and record.email.casefold() == current_email else "ĐÃ LƯU",
-                "session": "—",
-                "weekly": "—",
-                "quotaWindows": [],
-                "resetCredits": None,
-                "credits": None,
-                "quotaUpdated": "—",
-                "backupAt": self._format_date(record.created_at),
-                "quotaSource": "not-applicable",
-            }
-            for record in self.records
-        ]
-        return {
-            "provider": "antigravity",
-            "appName": "Antigravity",
-            "supportsQuota": False,
-            "current": profile,
-            "currentQuota": {},
-            "currentError": profile_error,
-            "backups": records,
-            "backupFolder": str(AGY_BACKUP_DIR),
-            "quotaSource": "Không áp dụng cho Antigravity",
-            "quotaFetchedAt": "—",
-            "quotaError": "",
-        }
+        current_quota: dict[str, Any] = {"quotaWindows": [], "status": "UNAVAILABLE", "error": "", "fetched_at": ""}
+        if current_credential:
+            current_quota, updated = self._read_agy_quota(current_credential, force_quota)
+            if updated:
+                try:
+                    latest = self.agy_store.current_credential()
+                    if latest and latest.blob == current_credential.blob:
+                        credential_write(updated)
+                        current_credential = updated
+                except Exception:
+                    current_quota["error"] = "Quota đã đọc nhưng chưa lưu được phiên làm mới."
+        def load_record(record: BackupRecord) -> dict[str, Any]:
+            active = bool(current_email and record.email.casefold() == current_email)
+            quota = current_quota if active and current_credential else None
+            try:
+                saved, scope = self.agy_store.read_session(record)
+                if quota is None:
+                    quota, refreshed = self._read_agy_quota(saved, force_quota)
+                    if refreshed:
+                        self.agy_store.update_record_credential(record, refreshed, scope)
+                elif current_credential.blob != saved.blob:
+                    self.agy_store.update_record_credential(record, current_credential, scope)
+            except Exception:
+                if quota is None:
+                    quota = {"quotaWindows": [], "status": "UNAVAILABLE", "error": "Không đọc được quota của phiên đã lưu.", "fetched_at": ""}
+            return {"id": record.path.name, "name": record.name, "email": record.email, "plan": "AGY",
+                    "status": quota["status"], "isCurrent": active, "session": "—", "weekly": "—",
+                    "quotaWindows": quota.get("quotaWindows", []), "resetCredits": None, "credits": None,
+                    "quotaUpdated": self._format_date(quota.get("fetched_at", "")), "backupAt": self._format_date(record.created_at),
+                    "quotaSource": "antigravity-session", "quotaError": quota.get("error", "")}
+        if self.records:
+            with ThreadPoolExecutor(max_workers=min(4, len(self.records))) as executor:
+                records = list(executor.map(load_record, self.records))
+        else:
+            records = []
+        errors = sum(bool(item.get("quotaError")) for item in records)
+        error = f"{errors} phiên chưa đọc được quota" if errors else current_quota.get("error", "")
+        return {"provider": "antigravity", "appName": "Antigravity", "supportsQuota": True,
+                "current": profile, "currentQuota": current_quota, "currentError": profile_error, "backups": records,
+                "backupFolder": str(AGY_BACKUP_DIR), "quotaSource": "Antigravity session quota",
+                "quotaFetchedAt": self._format_date(current_quota.get("fetched_at", "")), "quotaError": error}
 
     def build_state(self, force_quota: bool = False) -> dict[str, Any]:
         if self.provider == "antigravity":
-            return self.build_agy_state()
+            return self.build_agy_state(force_quota)
         try:
             profile = self.codex_store.current_profile()
             profile_error = ""
@@ -1525,7 +1558,7 @@ class WebApi:
         return self._result(f"Đã chuyển sang quản lý {('Antigravity' if value == 'antigravity' else 'Codex')}", self.build_state())
 
     def reload(self) -> dict[str, Any]:
-        return self.build_state(force_quota=self.provider == "codex")
+        return self.build_state(force_quota=True)
 
     def backup(self) -> dict[str, Any]:
         if not self.store.current_profile():
@@ -1612,11 +1645,20 @@ def cli(argv: list[str] | None = None) -> int:
         if args.current_email:
             store = AntigravitySessionStore() if args.provider == "antigravity" else SessionStore()
             profile = store.current_profile()
-            print(profile["email"] if profile else "")
+            email = profile["email"] if profile else ""
+            if args.report:
+                atomic_write(Path(args.report), json.dumps({"email": email}, ensure_ascii=False).encode("utf-8"))
+            elif sys.stdout is not None:
+                print(email)
             return 0
         if args.rainmeter_quota_json:
             maximum = max(1, min(20, args.max_accounts))
-            print(json.dumps(rainmeter_quota_payload(maximum), ensure_ascii=False))
+            payload = rainmeter_quota_payload(maximum)
+            output = json.dumps(payload, ensure_ascii=False)
+            if args.report:
+                atomic_write(Path(args.report), output.encode("utf-8"))
+            elif sys.stdout is not None:
+                print(output)
             return 0
         if args.switch_email:
             result = (
@@ -1624,7 +1666,11 @@ def cli(argv: list[str] | None = None) -> int:
                 if args.provider == "antigravity"
                 else switch_to_email(args.switch_email)
             )
-            print(json.dumps(result, ensure_ascii=False))
+            output = json.dumps(result, ensure_ascii=False)
+            if args.report:
+                atomic_write(Path(args.report), output.encode("utf-8"))
+            elif sys.stdout is not None:
+                print(output)
             return 0
     except Exception as exc:
         error = json.dumps({"ok": False, "message": str(exc)}, ensure_ascii=False)
@@ -1633,7 +1679,8 @@ def cli(argv: list[str] | None = None) -> int:
         elif sys.stdout is not None:
             print(error)
         return 1
-    parser.print_help()
+    if sys.stdout is not None:
+        parser.print_help()
     return 2
 
 
