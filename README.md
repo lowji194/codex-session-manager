@@ -123,3 +123,13 @@ dữ liệu dự án.
 - Tài khoản Windows chạy app cần quyền **Modify** trên `tool\backups` và các
   file bên trong. Chỉ có quyền Write là chưa đủ để thay thế backup đã tồn tại;
   trường hợp đó có thể báo `WinError 5` ở bước đổi tên file tạm.
+
+---
+
+## ☕ Buy me a coffee
+
+Nếu dự án này hữu ích với bạn, hãy mời mình một ly cà phê để ủng hộ việc duy trì và phát triển dự án. Cảm ơn bạn!
+
+<p align="center">
+  <a href="https://raw.githubusercontent.com/lowji194/lowji194/main/assets/donate-qr.svg"><img src="https://raw.githubusercontent.com/lowji194/lowji194/main/assets/donate-qr.svg" width="300" alt="Donate — scan the QR code"></a>
+</p>
