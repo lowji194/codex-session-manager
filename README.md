@@ -1,3 +1,5 @@
+[![🇺🇸 English](https://img.shields.io/badge/Language-English-1e293b?style=flat-square)](README-EN.md)
+
 # Codex & Antigravity Session Manager
 
 Ứng dụng pywebview dùng Microsoft Edge WebView2 với giao diện kính mờ macOS Pastel để quản lý nhiều phiên đăng nhập
